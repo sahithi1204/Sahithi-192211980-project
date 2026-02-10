@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Emergency Signal Controller</title>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; text-align: center; background-color: #0f0f0f; color: white; padding: 20px; }
+        .container { max-width: 450px; margin: auto; background: #1a1a1a; padding: 25px; border-radius: 20px; border: 2px solid #333; }
+        h1 { color: #ff3e3e; letter-spacing: 2px; margin-bottom: 5px; }
+        .subtitle { color: #888; font-size: 0.9em; margin-bottom: 25px; }
+        .input-group { background: #252525; padding: 15px; border-radius: 10px; margin-bottom: 20px; }
+        label { display: block; margin-bottom: 8px; color: #00d2ff; font-weight: bold; }
+        input { width: 80%; padding: 10px; border-radius: 5px; border: none; text-align: center; font-size: 1.1em; background: #333; color: white; }
+        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }
+        button { padding: 20px; font-size: 16px; font-weight: bold; border: none; border-radius: 12px; cursor: pointer; transition: all 0.2s ease; color: white; text-transform: uppercase; }
+        .btn-north { background: #e74c3c; grid-column: span 2; }
+        .btn-dir { background: #27ae60; }
+        .btn-reset { background: #2980b9; grid-column: span 2; margin-top: 15px; }
+        #status { margin-top: 20px; font-size: 1.1em; color: #f1c40f; min-height: 25px; }
+        .emergency-active { border: 2px solid #ff3e3e; box-shadow: 0 0 20px #ff3e3e; }
+        #countdown { font-size: 2em; color: #ff3e3e; margin: 10px 0; display: none; }
+    </style>
+</head>
+<body>
+
+<div class="container" id="mainBox">
+    <h1>AMBULANCE</h1>
+    <div class="subtitle">Emergency Traffic Override</div>
+
+    <div id="countdown">00</div>
+
+    <div class="input-group">
+        <label for="holdTime">GREEN HOLD TIME (SECONDS)</label>
+        <input type="number" id="holdTime" value="30" min="5" max="300">
+    </div>
+
+    <div class="grid">
+        <button class="btn-north" onclick="triggerEmergency(3)">North Green</button>
+        <button class="btn-dir" onclick="triggerEmergency(1)">East Green</button>
+        <button class="btn-dir" onclick="triggerEmergency(2)">West Green</button>
+        <button class="btn-north" onclick="triggerEmergency(4)">South Green</button>
+        <button class="btn-reset" onclick="triggerReset()">End Emergency Now</button>
+    </div>
+
+    <div id="status">System Ready</div>
+</div>
+
+<script>
+    const writeKey = "ZNJA0MSWB7ZI5GWL";
+    let timerInterval;
+
+    async function triggerEmergency(fieldNum) {
+        clearInterval(timerInterval); // Clear any existing timers
+        const seconds = parseInt(document.getElementById('holdTime').value) || 15;
+        
+        updateStatus(`Activating Emergency Signal...`);
+        
+        // Step 1: Send command to ThingSpeak
+        const url = `https://api.thingspeak.com/update?api_key=${writeKey}&field1=0&field2=0&field3=0&field4=0&field${fieldNum}=1&field5=${seconds}`;
+        
+        try {
+            const response = await fetch(url);
+            if (response.ok) {
+                document.getElementById('mainBox').classList.add('emergency-active');
+                startCountdown(seconds);
+            }
+        } catch (err) {
+            updateStatus("Connection Error");
+        }
+    }
+
+    function startCountdown(duration) {
+        let timeLeft = duration;
+        const display = document.getElementById('countdown');
+        display.style.display = 'block';
+        display.innerText = timeLeft;
+
+        updateStatus("EMERGENCY ACTIVE");
+
+        timerInterval = setInterval(async () => {
+            timeLeft--;
+            display.innerText = timeLeft;
+
+            if (timeLeft <= 0) {
+                clearInterval(timerInterval);
+                display.style.display = 'none';
+                // AUTOMATIC RESET
+                await triggerReset(); 
+            }
+        }, 1000);
+    }
+
+    async function triggerReset() {
+        clearInterval(timerInterval);
+        document.getElementById('countdown').style.display = 'none';
+        updateStatus("Cleaning up fields...");
+        
+        const url = `https://api.thingspeak.com/update?api_key=${writeKey}&field1=0&field2=0&field3=0&field4=0&field5=0`;
+        
+        try {
+            const response = await fetch(url);
+            if (response.ok) {
+                document.getElementById('mainBox').classList.remove('emergency-active');
+                updateStatus("System Offline - Normal Timing Resumed");
+            }
+        } catch (err) {
+            updateStatus("Reset Sync Error");
+        }
+    }
+
+    function updateStatus(msg) {
+        document.getElementById('status').innerText = msg;
+    }
+</script>
+
+</body>
+</html>
